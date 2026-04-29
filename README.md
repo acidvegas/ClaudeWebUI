@@ -1,7 +1,5 @@
-# Claude Web
-
 <p align="center">
-	<img src="./.screens/logo.png" alt="ClaudeWebUI Logo" width="50%">
+	<img src="./.screens/logo.png" alt="ClaudeWebUI Logo">
 </p>
 
 A self-hosted browser IDE that wraps the [Claude Code](https://claude.com/claude-code) CLI inside a real editor, file explorer, and git viewer, so you don't have to give up the IDE feel just because you want an agent in the loop.
