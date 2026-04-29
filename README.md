@@ -8,17 +8,7 @@ The industry is leaning hard into pure CLI agents, which to me feels impersonal 
 
 It's also easy to put behind something like Tailscale and run on a dedicated dev box, so I can pop into a serious dev environment from anywhere without exposing anything publicly.
 
-## Features
-
-- **Claude Code baked in**: every webui session is a real PTY running the `claude` CLI, with full xterm rendering, resize propagation (SIGWINCH), and resumable session history pulled from `~/.claude/projects/<slug>/*.jsonl`.
-- **Multi-session**: open as many Claude Code sessions as you want, each in its own working directory. The sessions panel lists everything currently running plus everything historically attached to the current cwd, with delete-from-history support.
-- **Monaco editor**: full-featured code editor with rainbow indent guides, GitHub-Dark theme, custom `dotenv` syntax (KEY=value, comments, `${VAR}` interpolation), block caret, gutter markers for unsaved git changes, and click-to-jump search results. Tabs survive switching, with their unsaved buffers intact.
-- **File explorer**: full directory tree with drag-and-drop reorganization, ctrl/shift multi-select, new file / new folder / duplicate / delete, hover tooltips with `~/`-prettified paths, [Material Icon Theme](https://github.com/material-extensions/vscode-material-icon-theme) icons, git status badges (M / A / D / ?), and `.gitignore`-aware dimming (works even before `git init`).
-- **Code search**: ripgrep-backed in-tree search with include/exclude glob fields, click-to-jump-to-line behavior, syntax-highlighted match preview.
-- **Git tab**: current branch, remote URL, ahead/behind tracking, branches list, tags, last 50 commits with `+/-` line counts and file counts. Click any commit to open a diff as its own editor tab: full per-file unified diff with green/red row tints, line numbers, hunk headers, syntax highlighting via highlight.js, collapsible files, hard limits at 25 files / 2000 lines per file with a "+N more hidden for brevity" footer.
-- **Built-in terminal tab**: pinned tab running `claude` in the active session's PTY.
-- **Password auth**: single-password gate sourced from a project-local `.env`, with a persistent `.webui-secret` so restarts don't log you out.
-- **Designed for remote dev**: works great behind Tailscale or any reverse proxy you like.
+I think this project is mostly to the point of what it is based on the description and the previews below. No fancy emojis, no over-inflated and fluffed up readme. Use it if you want. This was more for personal usage, but I can productionalize it if it gains traction. Anyways, cheers, enjoy.
 
 ## Previews
 ![](./.screens/login.png)
