@@ -57,6 +57,16 @@ window.addEventListener('DOMContentLoaded', () => {
   initUI();
   loadActiveSessions();
   loadClaudeHistory().then(showStartupModal);
+
+  // Refresh git badges every 5s while the tab is visible so commit/push from
+  // the terminal updates the explorer without manual refresh.
+  let gitInterval = setInterval(() => {
+    if (document.visibilityState === 'visible') refreshGitBadges();
+  }, 5000);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') refreshGitBadges();
+  });
+  window.addEventListener('focus', refreshGitBadges);
 });
 
 // ─── Terminal ─────────────────────────────────────────────────────────────────
@@ -1581,6 +1591,37 @@ function updateTermDot() { /* status dot removed */ }
 
 // ─── File tree ────────────────────────────────────────────────────────────────
 
+async function refreshGitBadges() {
+  if (!state.cwd) return;
+  const data = await apiFetch(`/api/git/status?path=${enc(state.cwd)}`);
+  if (!data) return;
+  state.gitStatus  = data.files || {};
+  state.gitIgnored = new Set(data.ignored || []);
+
+  const cwdPrefix = state.cwd + '/';
+  document.querySelectorAll('#file-tree .tree-item').forEach(item => {
+    const p = item.dataset.path;
+    if (!p) return;
+    const rel  = p.startsWith(cwdPrefix) ? p.slice(cwdPrefix.length) : p;
+    const name = p.split('/').pop();
+    const status  = state.gitStatus[rel] || '';
+    const ignored = state.gitIgnored.has(rel) || ALWAYS_DIM.has(name);
+    const fgClass = ignored ? 'fg-ignored' : gitStatusClass(status);
+    const badge   = ignored ? '' : gitBadge(status);
+
+    const nameEl = item.querySelector('.tree-name');
+    if (nameEl) {
+      nameEl.classList.remove('fg-modified', 'fg-added', 'fg-deleted', 'fg-untracked', 'fg-ignored');
+      if (fgClass) nameEl.classList.add(fgClass);
+    }
+    const oldBadge = item.querySelector('.tree-badge');
+    if (oldBadge) oldBadge.remove();
+    if (badge && item.classList.contains('tree-file')) {
+      item.insertAdjacentHTML('beforeend', badge);
+    }
+  });
+}
+
 async function loadTree(path) {
   if (!path) return;
   const [nodes, gitData] = await Promise.all([
@@ -2105,19 +2146,22 @@ function renderFileDiff(f) {
 
   const body = document.createElement('div');
   body.className = 'dfile-body';
+  const inner = document.createElement('div');
+  inner.className = 'dfile-body-inner';
+  body.appendChild(inner);
   for (const r of parsed.rows) {
     if (r.kind === 'hunk') {
       const row = document.createElement('div');
       row.className = 'drow drow-hunk';
       row.innerHTML = `<span class="dhunk">${esc(r.text)}</span>`;
-      body.appendChild(row);
+      inner.appendChild(row);
       continue;
     }
     if (r.kind === 'note') {
       const row = document.createElement('div');
       row.className = 'drow drow-note';
       row.innerHTML = `<span class="dnote">${esc(r.text)}</span>`;
-      body.appendChild(row);
+      inner.appendChild(row);
       continue;
     }
     const row = document.createElement('div');
@@ -2129,7 +2173,7 @@ function renderFileDiff(f) {
       `<span class="dnum dnum-new">${r.newNum || ''}</span>` +
       `<span class="dprefix">${sigil}</span>` +
       `<span class="dcode">${code}</span>`;
-    body.appendChild(row);
+    inner.appendChild(row);
   }
   wrap.appendChild(body);
 

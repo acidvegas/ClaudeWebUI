@@ -729,13 +729,18 @@ body.trippy .session-card.current {
   background: var(--canvas);
   overflow-x: auto;
 }
+.dfile-body-inner {
+  /* Widest row defines width; shorter rows stretch to fill so their
+     tinted backgrounds extend all the way to the right when scrolling. */
+  min-width: 100%;
+  width: max-content;
+}
 
 .drow {
   display: flex;
   font-family: var(--font-mono);
   font-size: var(--diff-font-size);
   line-height: 1.5;
-  min-width: max-content;
 }
 .dnum {
   flex-shrink: 0;

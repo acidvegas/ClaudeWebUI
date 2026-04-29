@@ -7,6 +7,24 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Claude Web</title>
+<meta name="description" content="Self-hosted browser IDE with Claude Code baked in">
+<meta name="theme-color" content="#0d1117">
+<link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='icons/logo.svg') }}">
+<link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='icons/icon-32.png') }}">
+<link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', filename='icons/icon-16.png') }}">
+<link rel="shortcut icon" href="{{ url_for('static', filename='icons/favicon.ico') }}">
+<link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='icons/apple-touch-icon.png') }}">
+<link rel="manifest" href="{{ url_for('static', filename='icons/manifest.webmanifest') }}">
+<meta property="og:title" content="ClaudeWeb">
+<meta property="og:description" content="Self-hosted browser IDE with Claude Code baked in">
+<meta property="og:type" content="website">
+<meta property="og:image" content="{{ url_for('static', filename='icons/og-preview.png', _external=True) }}">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="ClaudeWeb">
+<meta name="twitter:description" content="Self-hosted browser IDE with Claude Code baked in">
+<meta name="twitter:image" content="{{ url_for('static', filename='icons/og-preview.png', _external=True) }}">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Outfit:wght@700;800&display=swap" rel="stylesheet">
