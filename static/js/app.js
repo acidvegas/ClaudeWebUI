@@ -67,6 +67,9 @@ window.addEventListener('DOMContentLoaded', () => {
     if (document.visibilityState === 'visible') refreshGitBadges();
   });
   window.addEventListener('focus', refreshGitBadges);
+
+  // Autosave any tabs with unsaved edits every 5 minutes.
+  setInterval(autosaveDirtyTabs, 5 * 60 * 1000);
 });
 
 // ─── Terminal ─────────────────────────────────────────────────────────────────
@@ -429,9 +432,10 @@ function initMonaco() {
       },
     });
 
-    ed.onDidChangeCursorPosition((e) => {
-      el('status-cursor').textContent = `Ln ${e.position.lineNumber}, Col ${e.position.column}`;
-    });
+    ed.onDidChangeCursorPosition(updateStatusCursor);
+    ed.onDidChangeCursorSelection(updateStatusCursor);
+    ed.onDidChangeModelContent(() => updateStatusFile());
+    ed.onDidChangeModelLanguageConfiguration(() => updateStatusFile());
     ed.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, saveFile);
 
     initRainbowIndents(ed);
@@ -1651,7 +1655,7 @@ function applyTreeSelection() {
   });
 }
 
-const ALWAYS_DIM = new Set(['.git', '.gitignore', '.dockerignore']);
+const ALWAYS_DIM = new Set(['.git', '.gitignore', '.dockerignore', '.claude']);
 
 function renderNodes(nodes, parent, basePath, depth, expanded) {
   for (const node of nodes) {
@@ -2482,6 +2486,8 @@ async function openFile(path, line) {
       el('status-lang').textContent = lang;
       el('status-file').textContent = prettyPath(path);
       applyGitGutter(path);
+      updateStatusFile();
+      updateStatusCursor();
       updateMdPreviewButton();
       if (typeof line === 'number' && line > 0) {
         requestAnimationFrame(() => {
@@ -2502,7 +2508,15 @@ async function openFile(path, line) {
   updateMdPreviewButton();
 
   whenMonaco(() => {
-    const entry = { model: monaco.editor.createModel(data.content, lang), language: lang };
+    const model = monaco.editor.createModel(data.content, lang);
+    const entry = { model, language: lang, savedContent: data.content, dirty: false };
+    entry.changeListener = model.onDidChangeContent(() => {
+      const isDirty = model.getValue() !== entry.savedContent;
+      if (isDirty !== entry.dirty) {
+        entry.dirty = isDirty;
+        setTabDirty(path, isDirty);
+      }
+    });
     state.openTabs[path] = entry;
     state.editor.setModel(entry.model);
     state.editor.updateOptions({ readOnly: false });
@@ -2520,6 +2534,61 @@ async function openFile(path, line) {
   });
 
   addTab(path);
+}
+
+function updateStatusCursor() {
+  const ed = state.editor;
+  if (!ed) return;
+  const sel = ed.getSelection();
+  const model = ed.getModel();
+  const pos = ed.getPosition();
+  const cursorEl = el('status-cursor');
+  if (!cursorEl) return;
+  if (sel && !sel.isEmpty() && model) {
+    const text = model.getValueInRange(sel);
+    const chars = text.length;
+    const lines = sel.endLineNumber - sel.startLineNumber + 1;
+    cursorEl.textContent = lines > 1
+      ? `${chars} sel (${lines} lines)`
+      : `${chars} sel`;
+  } else if (pos) {
+    cursorEl.textContent = `Ln ${pos.lineNumber}, Col ${pos.column}`;
+  }
+}
+
+function formatBytes(n) {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function updateStatusFile() {
+  const ed = state.editor;
+  if (!ed) return;
+  const model = ed.getModel();
+  if (!model) return;
+
+  // Size + line count
+  const sizeEl = el('status-size');
+  if (sizeEl) {
+    const text = model.getValue();
+    const bytes = new TextEncoder().encode(text).length;
+    const lines = model.getLineCount();
+    sizeEl.textContent = `${formatBytes(bytes)} · ${lines} ln`;
+  }
+
+  // Indent style
+  const indentEl = el('status-indent');
+  if (indentEl) {
+    const opts = model.getOptions();
+    indentEl.textContent = `${opts.insertSpaces ? 'Spaces' : 'Tabs'}: ${opts.tabSize}`;
+  }
+
+  // EOL
+  const eolEl = el('status-eol');
+  if (eolEl) {
+    eolEl.textContent = model.getEOL() === '\r\n' ? 'CRLF' : 'LF';
+  }
 }
 
 async function applyGitGutter(path) {
@@ -2590,7 +2659,11 @@ function addTab(path) {
   tab.querySelector('.tab-close').addEventListener('click', (e) => {
     e.stopPropagation();
     const wasActive = tab.classList.contains('active');
-    if (state.openTabs[path]) { state.openTabs[path].model.dispose(); delete state.openTabs[path]; }
+    if (state.openTabs[path]) {
+      try { state.openTabs[path].changeListener?.dispose(); } catch {}
+      state.openTabs[path].model.dispose();
+      delete state.openTabs[path];
+    }
     tab.remove();
     if (wasActive) {
       const remaining = tabs.querySelectorAll('.tab:not(.tab-pinned)');
@@ -2629,18 +2702,52 @@ function updateTabScrollUI() {
 
 async function saveFile() {
   if (!state.currentFile || !state.editor) return;
+  const path = state.currentFile;
+  const content = state.editor.getValue();
   const ok = await apiFetch('/api/file', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ path: state.currentFile, content: state.editor.getValue() }),
+    body: JSON.stringify({ path, content }),
   });
   if (ok) {
+    const entry = state.openTabs[path];
+    if (entry) {
+      entry.savedContent = content;
+      entry.dirty = false;
+      setTabDirty(path, false);
+    }
     const btn = el('btn-save');
     btn.textContent = '✓ Saved';
     setTimeout(() => { btn.textContent = 'Save'; }, 1200);
     loadTree(state.cwd);
-    applyGitGutter(state.currentFile);
+    applyGitGutter(path);
   }
+}
+
+function setTabDirty(path, dirty) {
+  const tab = el('tab-list').querySelector(`[data-path="${CSS.escape(path)}"]`);
+  if (tab) tab.classList.toggle('tab-dirty', !!dirty);
+}
+
+async function autosaveDirtyTabs() {
+  const paths = Object.keys(state.openTabs);
+  for (const path of paths) {
+    const entry = state.openTabs[path];
+    if (!entry || !entry.model || !entry.dirty) continue;
+    const content = entry.model.getValue();
+    const ok = await apiFetch('/api/file', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path, content }),
+    });
+    if (ok) {
+      entry.savedContent = content;
+      entry.dirty = false;
+      setTabDirty(path, false);
+      if (state.currentFile === path) applyGitGutter(path);
+    }
+  }
+  loadTree(state.cwd);
 }
 
 // ─── Sidebar resize ───────────────────────────────────────────────────────────

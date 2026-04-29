@@ -1012,6 +1012,8 @@ body.trippy .session-card.current {
   border-top-color: var(--tab-color);
 }
 
+.tab.tab-dirty .tab-name { font-style: italic; }
+
 .tab-pinned { padding-left: 14px; padding-right: 14px; }
 .tab-term-icon { font-size: 12px; display: inline-flex; align-items: center; }
 .tab-term-icon svg { width: 13px; height: 13px; display: block; }
@@ -1203,12 +1205,15 @@ kbd {
 
 /* ─── Editor statusbar ───────────────────────────────────── */
 #editor-statusbar {
-  display: flex; align-items: center; gap: 14px;
-  height: 22px;
+  display: flex; align-items: center; justify-content: space-between;
+  height: 18px;
   background: var(--accent-em);
-  color: rgba(255,255,255,.85); padding: 0 12px;
-  font-size: 11px; flex-shrink: 0;
+  color: rgba(255,255,255,.85); padding: 0 10px;
+  font-size: 10px; flex-shrink: 0;
 }
+#editor-statusbar .sb-left,
+#editor-statusbar .sb-right { display: flex; align-items: center; gap: 12px; }
+#editor-statusbar .dim { opacity: .65; }
 .dim { opacity: .55; }
 
 /* ─── Diff2html overrides ────────────────────────────────── */
