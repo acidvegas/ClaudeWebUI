@@ -1,0 +1,5 @@
+# ClaudeWebUI - Developed by acidvegas in Python (https://github.com/acidvegas/claudewebui)
+# claudewebui/requirements.txt
+
+flask>=2.3.0
+flask-socketio>=5.3.0

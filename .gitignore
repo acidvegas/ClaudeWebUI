@@ -1,0 +1,35 @@
+# ClaudeWebUI - Developed by acidvegas in Python (https://github.com/acidvegas/claudewebui)
+# claudewebui/.gitignore
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# Virtualenvs
+.venv/
+venv/
+env/
+
+# Editors / IDEs
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs / runtime
+*.log
+/tmp/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Local secrets
+.env
+.env.local
+.webui-secret

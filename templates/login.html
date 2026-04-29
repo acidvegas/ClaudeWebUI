@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Claude Web — Sign in</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+<style>
+  body.login-body {
+    margin: 0; min-height: 100vh;
+    display: flex; align-items: center; justify-content: center;
+    background:
+      radial-gradient(circle at 30% 20%, rgba(121,192,255,.08), transparent 60%),
+      radial-gradient(circle at 70% 80%, rgba(219,97,162,.08), transparent 60%),
+      var(--canvas);
+    color: var(--text);
+    font-family: var(--font-ui);
+  }
+  .login-card {
+    width: 360px; max-width: calc(100vw - 32px);
+    background: var(--canvas-sub);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 32px 28px;
+    box-shadow: 0 20px 60px rgba(0,0,0,.5);
+    display: flex; flex-direction: column; align-items: center; gap: 16px;
+  }
+  .login-logo svg { width: 64px; height: 64px; filter: drop-shadow(0 2px 12px rgba(163,113,247,.4)); }
+  .login-title {
+    font-family: 'Outfit', var(--font-ui);
+    font-weight: 800; font-size: 28px; letter-spacing: -1px;
+    margin: 0; display: inline-flex; gap: 1px;
+  }
+  .login-sub { color: var(--text-dim); font-size: 12px; margin: -8px 0 8px; }
+  .login-form { width: 100%; display: flex; flex-direction: column; gap: 10px; }
+  .login-form input[type="password"] {
+    width: 100%; box-sizing: border-box;
+    background: var(--canvas-inset); color: var(--text);
+    border: 1px solid var(--border); border-radius: 6px;
+    padding: 10px 12px; font-family: var(--font-mono); font-size: 13px;
+    outline: none; transition: border-color .12s, box-shadow .12s;
+  }
+  .login-form input[type="password"]:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-bg);
+  }
+  .login-form button {
+    background: var(--accent-em); color: #fff;
+    border: 1px solid var(--accent-em); border-radius: 6px;
+    padding: 10px; font-weight: 600; font-size: 13px; cursor: pointer;
+    transition: background .12s, border-color .12s;
+  }
+  .login-form button:hover { background: var(--accent); border-color: var(--accent); }
+  .login-error {
+    color: var(--red); font-size: 12px; text-align: center;
+    background: rgba(248,81,73,.08);
+    border: 1px solid rgba(248,81,73,.3); border-radius: 6px;
+    padding: 8px 10px; margin: 0;
+  }
+</style>
+</head>
+<body class="login-body">
+  <div class="login-card">
+    <div class="login-logo">
+      <svg viewBox="0 0 32 32" aria-hidden="true">
+        <defs>
+          <linearGradient id="lg-top" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stop-color="#79c0ff"/>
+            <stop offset="100%" stop-color="#a371f7"/>
+          </linearGradient>
+          <linearGradient id="lg-left" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#a371f7"/>
+            <stop offset="100%" stop-color="#db61a2"/>
+          </linearGradient>
+          <linearGradient id="lg-right" x1="1" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#79c0ff"/>
+            <stop offset="100%" stop-color="#db61a2"/>
+          </linearGradient>
+        </defs>
+        <polygon points="16,3 29,10.5 16,18 3,10.5" fill="url(#lg-top)"/>
+        <polygon points="3,10.5 16,18 16,29 3,21.5" fill="url(#lg-left)"/>
+        <polygon points="29,10.5 16,18 16,29 29,21.5" fill="url(#lg-right)" opacity="0.85"/>
+      </svg>
+    </div>
+    <h1 class="login-title">
+      <span class="logo-claude">Claude</span><span class="logo-web">Web</span>
+    </h1>
+    <p class="login-sub">Sign in to continue</p>
+    {% if error %}
+      <p class="login-error">{{ error }}</p>
+    {% endif %}
+    <form class="login-form" method="post" autocomplete="off">
+      <input type="password" name="password" placeholder="Password" autofocus required>
+      <button type="submit">Sign in</button>
+    </form>
+  </div>
+</body>
+</html>

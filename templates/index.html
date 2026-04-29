@@ -1,0 +1,375 @@
+<!-- ClaudeWebUI - Developed by acidvegas in Python (https://github.com/acidvegas/claudewebui) -->
+<!-- claudewebui/templates/index.html                                                          -->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Claude Web</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Outfit:wght@700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}?v={{ cache_bust }}">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/github-dark.min.css">
+</head>
+<body>
+<div id="app">
+
+  <!-- ── Startup modal ─────────────────────────────────────────────── -->
+  <div id="modal-startup" class="modal">
+    <div class="modal-box startup-box">
+      <div class="startup-header">
+        <span class="startup-logo">⚡</span>
+        <h2>Claude Web</h2>
+      </div>
+      <div class="startup-section">
+        <label>Open Directory</label>
+        <div class="startup-dir-row">
+          <input type="text" id="startup-dir" value="{{ default_cwd }}"
+                 placeholder="/path/to/project" autocomplete="off" spellcheck="false">
+          <button id="startup-open-btn" class="btn btn-primary">Open</button>
+        </div>
+      </div>
+      <div id="startup-recents-section" class="startup-section hidden">
+        <label>Recent</label>
+        <div id="startup-recents-list"></div>
+      </div>
+      <div id="startup-sessions-section" class="startup-section hidden">
+        <label>Session History</label>
+        <div id="startup-sessions-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── New session modal ─────────────────────────────────────────── -->
+  <div id="modal-new" class="modal hidden">
+    <div class="modal-box">
+      <h3>New Session</h3>
+      <label>Working Directory</label>
+      <input type="text" id="modal-cwd" placeholder="/path/to/project">
+      <label>Initial Prompt <span class="dim">(optional)</span></label>
+      <textarea id="modal-prompt" rows="3" placeholder="e.g. Review this codebase…"></textarea>
+      <div class="modal-actions">
+        <button id="modal-start-btn" class="btn btn-primary">Start Session</button>
+        <button id="modal-cancel-btn" class="btn btn-secondary">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Main layout (no top nav) ─────────────────────────────────── -->
+  <div id="main-layout">
+
+    <!-- Sidebar -->
+    <div id="sidebar">
+      <div id="sidebar-brand">
+        <span class="logo">
+          <svg class="logo-mark" viewBox="0 0 32 32" aria-hidden="true">
+            <defs>
+              <linearGradient id="logo-grad-top" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stop-color="#79c0ff"/>
+                <stop offset="100%" stop-color="#a371f7"/>
+              </linearGradient>
+              <linearGradient id="logo-grad-left" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#a371f7"/>
+                <stop offset="100%" stop-color="#db61a2"/>
+              </linearGradient>
+              <linearGradient id="logo-grad-right" x1="1" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#79c0ff"/>
+                <stop offset="100%" stop-color="#db61a2"/>
+              </linearGradient>
+            </defs>
+            <polygon points="16,3 29,10.5 16,18 3,10.5" fill="url(#logo-grad-top)"/>
+            <polygon points="3,10.5 16,18 16,29 3,21.5" fill="url(#logo-grad-left)"/>
+            <polygon points="29,10.5 16,18 16,29 29,21.5" fill="url(#logo-grad-right)" opacity="0.85"/>
+          </svg>
+          <span class="logo-claude">Claude</span><span class="logo-web">Web</span>
+        </span>
+        <button id="btn-collapse-sidebar" class="btn-icon" title="Hide sidebar">‹</button>
+      </div>
+
+      <!-- Tab buttons -->
+      <div class="sb-tabs">
+        <button id="btn-open-dir" class="sb-tab" title="Open directory">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round">
+            <path d="M2 4.5c0-.55.45-1 1-1h3l1.5 1.5h5c.55 0 1 .45 1 1v1H2v-2.5z"/>
+            <path d="M2 7h12.5l-1.6 5.6c-.13.45-.55.4-1 .4H3.1c-.45 0-.87.05-1-.4L2 7z"/>
+          </svg>
+        </button>
+        <div class="sb-tabs-divider"></div>
+        <button class="sb-tab active" data-tab="sb-explorer" title="Explorer">
+          <svg viewBox="0 0 16 16" fill="currentColor">
+            <circle cx="3" cy="4" r="1.1"/>
+            <rect x="6" y="3.3" width="8" height="1.4" rx=".5"/>
+            <circle cx="3" cy="8" r="1.1"/>
+            <rect x="6" y="7.3" width="8" height="1.4" rx=".5"/>
+            <circle cx="3" cy="12" r="1.1"/>
+            <rect x="6" y="11.3" width="8" height="1.4" rx=".5"/>
+          </svg>
+        </button>
+        <button class="sb-tab" data-tab="sb-search" title="Search">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
+            <circle cx="7" cy="7" r="4.2"/>
+            <line x1="10.2" y1="10.2" x2="13.5" y2="13.5"/>
+          </svg>
+        </button>
+        <button class="sb-tab" data-tab="sb-git" title="Git">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="4" cy="4" r="1.6"/>
+            <circle cx="4" cy="12" r="1.6"/>
+            <circle cx="12" cy="9" r="1.6"/>
+            <line x1="4" y1="5.6" x2="4" y2="10.4"/>
+            <path d="M4 7.5c0 1.5 1 2.5 3 2.5h3.5"/>
+          </svg>
+        </button>
+        <button class="sb-tab" data-tab="sb-sessions" title="Sessions">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round">
+            <rect x="2" y="3" width="12" height="10" rx="1.5"/>
+            <polyline points="5,7 7.2,8.6 5,10.2"/>
+            <line x1="9" y1="10.2" x2="11.5" y2="10.2"/>
+          </svg>
+        </button>
+        <button class="sb-tab" data-tab="sb-settings" title="Settings">⚙</button>
+        <div class="sb-tabs-spacer"></div>
+        <button id="btn-new-session" class="sb-tab" title="New session">＋</button>
+      </div>
+
+      <!-- Explorer section -->
+      <div class="sb-section active" id="sb-explorer">
+        <div class="explorer-toolbar">
+          <button id="btn-new-file" class="explorer-action" title="New file">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round">
+              <path d="M3 2h6l4 4v8a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z"/>
+              <path d="M9 2v4h4"/>
+              <line x1="7.5" y1="9" x2="7.5" y2="13"/>
+              <line x1="5.5" y1="11" x2="9.5" y2="11"/>
+            </svg>
+          </button>
+          <button id="btn-new-folder" class="explorer-action" title="New folder">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round">
+              <path d="M2 4.5c0-.55.45-1 1-1h3l1.5 1.5h5c.55 0 1 .45 1 1v7c0 .55-.45 1-1 1H3c-.55 0-1-.45-1-1V4.5z"/>
+              <line x1="8" y1="7.5" x2="8" y2="11.5"/>
+              <line x1="6" y1="9.5" x2="10" y2="9.5"/>
+            </svg>
+          </button>
+          <button id="btn-duplicate-selected" class="explorer-action" title="Duplicate selected">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round">
+              <rect x="5" y="5" width="9" height="9" rx="1"/>
+              <path d="M3 11V3a1 1 0 0 1 1-1h7"/>
+            </svg>
+          </button>
+          <button id="btn-delete-selected" class="explorer-action explorer-action-danger" title="Delete selected">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round">
+              <line x1="2.5" y1="4" x2="13.5" y2="4"/>
+              <path d="M5 4V3a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v1"/>
+              <path d="M3.5 4l.7 9c.04.55.5 1 1 1h5.6c.55 0 1-.45 1-1l.7-9"/>
+              <line x1="6.5" y1="7" x2="6.5" y2="12"/>
+              <line x1="9.5" y1="7" x2="9.5" y2="12"/>
+            </svg>
+          </button>
+          <button id="btn-refresh-tree" class="explorer-action" title="Refresh">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round">
+              <path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9"/>
+              <polyline points="13.5,2 13.5,5 10.5,5"/>
+            </svg>
+          </button>
+        </div>
+        <div class="sb-body">
+          <div id="file-tree"></div>
+        </div>
+      </div>
+
+      <!-- Search section -->
+      <div class="sb-section" id="sb-search">
+        <div class="sb-body">
+          <div class="search-input-row">
+            <input type="text" id="search-input" placeholder="Search in files..." autocomplete="off" spellcheck="false">
+            <input type="text" id="search-include" placeholder="files to include (e.g. *.py, src/**)" autocomplete="off" spellcheck="false">
+            <input type="text" id="search-exclude" placeholder="files to exclude (e.g. *.log, dist)" autocomplete="off" spellcheck="false">
+          </div>
+          <div id="search-status" class="search-status"></div>
+          <div id="search-results"></div>
+        </div>
+      </div>
+
+      <!-- Git section -->
+      <div class="sb-section" id="sb-git">
+        <div class="sb-body">
+          <div id="git-panel"></div>
+        </div>
+      </div>
+
+      <!-- Sessions section -->
+      <div class="sb-section" id="sb-sessions">
+        <div class="sb-body">
+          <div id="sessions-list"></div>
+        </div>
+      </div>
+
+      <!-- Settings section -->
+      <div class="sb-section" id="sb-settings">
+        <div class="sb-body">
+          <div id="config-panel-body"></div>
+        </div>
+      </div>
+
+      <!-- Credits -->
+      <div id="sidebar-credits">
+        Developed by
+        <a href="https://github.com/acidvegas/clauduewebui" target="_blank" rel="noopener noreferrer">
+          <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+            <path fill-rule="evenodd" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
+          </svg>
+          acidvegas
+        </a>
+      </div>
+    </div>
+
+    <div id="sidebar-resize" class="handle-v"></div>
+
+    <!-- Right pane -->
+    <div id="right-pane">
+      <button id="btn-show-sidebar" class="btn-icon hidden" title="Show sidebar">›</button>
+
+      <div id="editor-area">
+        <!-- Tab bar -->
+        <div id="editor-tabs">
+          <div id="tab-list">
+            <div id="tab-terminal" class="tab tab-pinned" title="Claude Code">
+              <span class="tab-term-icon">
+                <svg viewBox="0 0 24 24" fill="#D97757" aria-hidden="true">
+                  <path d="m4.7144 15.9555 4.7174-2.6471.079-.2307-.079-.1275h-.2307l-.7893-.0486-2.6956-.0729-2.3375-.0971-2.2646-.1214-.5707-.1215-.5343-.7042.0546-.3522.4797-.3218.686.0608 1.5179.1032 2.2767.1578 1.6514.0972 2.4468.255h.3886l.0546-.1579-.1336-.0971-.1032-.0972L6.973 9.8356l-2.55-1.6879-1.3356-.9714-.7225-.4918-.3643-.4614-.1578-1.0078.6557-.7225.8803.0607.2246.0607.8925.686 1.9064 1.4754 2.4893 1.8336.3643.3035.1457-.1032.0182-.0728-.164-.2733-1.3539-2.4467-1.445-2.4893-.6435-1.032-.17-.6194c-.0607-.255-.1032-.4674-.1032-.7285L6.287.1335 6.6997 0l.9957.1336.419.3642.6192 1.4147 1.0018 2.2282 1.5543 3.0296.4553.8985.2429.8318.091.255h.1579v-.1457l.1275-1.706.2368-2.0947.2307-2.6957.0789-.7589.3764-.9107.7468-.4918.5828.2793.4797.686-.0668.4433-.2853 1.8517-.5586 2.9021-.3643 1.9429h.2125l.2429-.2429.9835-1.3053 1.6514-2.0643.7286-.8196.85-.9046.5464-.4311h1.0321l.759 1.1293-.34 1.1657-1.0625 1.3478-.8804 1.1414-1.2628 1.7-.7893 1.36.0729.1093.1882-.0183 2.8535-.607 1.5421-.2794 1.8396-.3157.8318.3886.091.3946-.3278.8075-1.967.4857-2.3072.4614-3.4364.8136-.0425.0304.0486.0607 1.5482.1457.6618.0364h1.621l3.0175.2247.7892.522.4736.6376-.079.4857-1.2142.6193-1.6393-.3886-3.825-.9107-1.3113-.3279h-.1822v.1093l1.0929 1.0686 2.0035 1.8092 2.5075 2.3314.1275.5768-.3218.4554-.34-.0486-2.2039-1.6575-.85-.7468-1.9246-1.621h-.1275v.17l.4432.6496 2.3436 3.5214.1214 1.0807-.17.3521-.6071.2125-.6679-.1214-1.3721-1.9246L14.38 17.959l-1.1414-1.9428-.1397.079-.674 7.2552-.3156.3703-.7286.2793-.6071-.4614-.3218-.7468.3218-1.4753.3886-1.9246.3157-1.53.2853-1.9004.17-.6314-.0121-.0425-.1397.0182-1.4328 1.9672-2.1796 2.9446-1.7243 1.8456-.4128.164-.7164-.3704.0667-.6618.4008-.5889 2.386-3.0357 1.4389-1.882.929-1.0868-.0062-.1579h-.0546l-6.3385 4.1164-1.1293.1457-.4857-.4554.0608-.7467.2307-.2429 1.9064-1.3114Z"/>
+                </svg>
+              </span>
+              <span class="tab-name">Claude Code</span>
+            </div>
+            <div id="tab-shell" class="tab tab-pinned" title="Shell">
+              <span class="tab-term-icon">
+                <svg viewBox="0 0 16 16" fill="none" stroke="#56d4dd" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <polyline points="3,5 6,8 3,11"/>
+                  <line x1="8" y1="11.5" x2="13" y2="11.5"/>
+                </svg>
+              </span>
+              <span class="tab-name">Shell</span>
+            </div>
+          </div>
+          <button id="tab-scroll-left" class="tab-action tab-scroll hidden" title="Scroll tabs left">‹</button>
+          <button id="tab-scroll-right" class="tab-action tab-scroll hidden" title="Scroll tabs right">›</button>
+          <button id="btn-md-preview" class="tab-action tab-action-icon hidden" title="Preview markdown">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M8 3.5C5 3.5 2.6 5.5 1.6 8c1 2.5 3.4 4.5 6.4 4.5s5.4-2 6.4-4.5c-1-2.5-3.4-4.5-6.4-4.5z"/>
+              <circle cx="8" cy="8" r="2.2"/>
+            </svg>
+          </button>
+          <button id="btn-fit-terminal" class="tab-action tab-action-icon hidden" title="Refit terminal">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="2,6 2,2 6,2"/>
+              <polyline points="14,6 14,2 10,2"/>
+              <polyline points="2,10 2,14 6,14"/>
+              <polyline points="14,10 14,14 10,14"/>
+            </svg>
+          </button>
+          <button id="btn-save" class="tab-action tab-action-icon hidden" title="Save (Ctrl+S)">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M2.5 2.5h8.5l2.5 2.5v8.5a.5.5 0 0 1-.5.5h-10.5a.5.5 0 0 1-.5-.5v-10.5a.5.5 0 0 1 .5-.5z"/>
+              <rect x="4.5" y="2.5" width="6" height="3.5"/>
+              <rect x="4" y="9" width="8" height="4.5"/>
+            </svg>
+          </button>
+          <button id="btn-toggle-minimap" class="tab-action tab-action-icon hidden" title="Toggle minimap">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="2" y="2.5" width="12" height="11" rx="1.2"/>
+              <rect x="9.5" y="2.5" width="4.5" height="11" fill="currentColor" opacity="0.35" stroke="none"/>
+              <line x1="3.5" y1="5" x2="8" y2="5"/>
+              <line x1="3.5" y1="7.5" x2="7" y2="7.5"/>
+              <line x1="3.5" y1="10" x2="8" y2="10"/>
+            </svg>
+          </button>
+          <button id="btn-font-dec" class="tab-action tab-action-font" title="Decrease font size">A−</button>
+          <button id="btn-font-inc" class="tab-action tab-action-font" title="Increase font size">A+</button>
+        </div>
+
+        <!-- Content area -->
+        <div id="editor-body">
+          <div id="welcome">
+            <div class="welcome-inner">
+              <div class="welcome-logo">
+                <svg viewBox="0 0 32 32" aria-hidden="true">
+                  <defs>
+                    <linearGradient id="welcome-grad-top" x1="0" y1="0" x2="1" y2="1">
+                      <stop offset="0%" stop-color="#79c0ff"/>
+                      <stop offset="100%" stop-color="#a371f7"/>
+                    </linearGradient>
+                    <linearGradient id="welcome-grad-left" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stop-color="#a371f7"/>
+                      <stop offset="100%" stop-color="#db61a2"/>
+                    </linearGradient>
+                    <linearGradient id="welcome-grad-right" x1="1" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stop-color="#79c0ff"/>
+                      <stop offset="100%" stop-color="#db61a2"/>
+                    </linearGradient>
+                  </defs>
+                  <polygon points="16,3 29,10.5 16,18 3,10.5" fill="url(#welcome-grad-top)"/>
+                  <polygon points="3,10.5 16,18 16,29 3,21.5" fill="url(#welcome-grad-left)"/>
+                  <polygon points="29,10.5 16,18 16,29 29,21.5" fill="url(#welcome-grad-right)" opacity="0.85"/>
+                </svg>
+              </div>
+              <h2 class="welcome-title">
+                <span class="logo-claude">Claude</span><span class="logo-web">Web</span>
+              </h2>
+              <p>Open a file from the explorer or click
+                <svg class="welcome-inline-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true">
+                  <rect x="2" y="3" width="12" height="10" rx="1.5"/>
+                  <polyline points="5,7 7.2,8.6 5,10.2"/>
+                  <line x1="9" y1="10.2" x2="11.5" y2="10.2"/>
+                </svg>
+                to open a session.</p>
+              <div class="welcome-shortcuts">
+                <span><kbd>Ctrl+S</kbd> Save</span>
+                <span><kbd>Ctrl+`</kbd> Terminal</span>
+              </div>
+            </div>
+          </div>
+          <div id="monaco-container" class="hidden"></div>
+          <div id="diff-pane" class="hidden"></div>
+          <div id="md-pane" class="hidden"></div>
+          <div id="img-pane" class="hidden"></div>
+          <div id="terminal-pane" class="hidden">
+            <div id="terminal-container"></div>
+          </div>
+          <div id="shell-pane" class="hidden">
+            <div id="shell-container"></div>
+          </div>
+        </div>
+
+        <!-- Status bar -->
+        <div id="editor-statusbar" class="hidden">
+          <span id="status-lang">—</span>
+          <span id="status-cursor">Ln 1, Col 1</span>
+          <span id="status-file" class="dim"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>window.HOME_DIR = {{ home_dir | tojson }}; window.DEFAULT_CWD = {{ default_cwd | tojson }};</script>
+<style>
+  @font-face {
+    font-family: 'Symbols Nerd Font Mono';
+    src: url('https://cdn.jsdelivr.net/gh/ryanoasis/nerd-fonts@master/patched-fonts/NerdFontsSymbolsOnly/SymbolsNerdFontMono-Regular.ttf') format('truetype');
+    font-display: swap;
+  }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.min.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/marked@13/marked.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
+<script>var require = { paths: { vs: 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs' } };</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs/loader.min.js"></script>
+<script src="{{ url_for('static', filename='js/app.js') }}?v={{ cache_bust }}"></script>
+</body>
+</html>

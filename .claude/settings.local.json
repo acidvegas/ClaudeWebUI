@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl -s \"http://localhost:5000/api/sessions\")",
+      "Bash(python3 -m json.tool)",
+      "Bash(pkill -f \"webui/app.py\")",
+      "Bash(/home/acidvegas/webui/.venv/bin/python /home/acidvegas/webui/app.py)",
+      "Bash(xargs -r kill)",
+      "Bash(kill 848193 848721)",
+      "Bash(echo \"started PID $!\")",
+      "Read(//tmp/**)",
+      "Bash(kill 848862 848933)",
+      "Bash(disown)",
+      "Bash(/home/acidvegas/webui/restart.sh *)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://127.0.0.1:5000/)",
+      "Bash(curl -s -X POST -H \"Content-Type: application/json\" -d '{\"cwd\":\"/home/acidvegas/webui\"}' http://127.0.0.1:5000/api/shell-session)",
+      "Bash(curl *)"
+    ]
+  }
+}
