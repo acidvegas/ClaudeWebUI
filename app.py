@@ -22,35 +22,14 @@ from datetime import datetime, timedelta, timezone
 from functools import wraps
 from pathlib import Path
 
+from dotenv import load_dotenv
 from flask import (Flask, jsonify, redirect, render_template, request, abort,
                    send_file, session as flask_session, url_for)
 from flask_socketio import SocketIO, emit, join_room, leave_room
 
 
-# ---------- .env loader (no extra dep) ----------
-
-def _load_dotenv(path):
-    if not os.path.isfile(path):
-        return
-    try:
-        with open(path) as f:
-            for line in f:
-                line = line.strip()
-                if not line or line.startswith('#') or '=' not in line:
-                    continue
-                k, v = line.split('=', 1)
-                k = k.strip()
-                v = v.strip()
-                if (v.startswith('"') and v.endswith('"')) or \
-                   (v.startswith("'") and v.endswith("'")):
-                    v = v[1:-1]
-                os.environ.setdefault(k, v)
-    except OSError:
-        pass
-
-
 _APP_DIR = os.path.dirname(os.path.abspath(__file__))
-_load_dotenv(os.path.join(_APP_DIR, '.env'))
+load_dotenv(os.path.join(_APP_DIR, '.env'))
 
 WEBUI_PASSWORD = os.environ.get('WEBUI_PASSWORD') or 'loldongs'
 
@@ -1341,7 +1320,7 @@ def resume_session():
 
 
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 61234))
+    port = int(os.environ.get('PORT', 5005))
     host = os.environ.get('HOST', '0.0.0.0')
     print(f'Claude Code Web IDE → http://{host}:{port}')
     socketio.run(app, host=host, port=port, debug=False, allow_unsafe_werkzeug=True)
