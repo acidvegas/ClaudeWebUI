@@ -960,35 +960,80 @@ def _collect_gitignored(root, patterns, max_entries=2000):
     return out
 
 
+def _collect_repo_data(root, max_depth=6):
+    """Walk root looking for nested git repos and stand-alone .gitignore files,
+    so opening a parent dir that contains multiple repos still greys out each
+    repo's ignored entries and surfaces each repo's working-tree changes.
+
+    Returns (status_files, ignored_paths). Both are keyed/relative to root."""
+    files = {}
+    ignored = set()
+
+    for cur, dirs, in_files in os.walk(root):
+        rel = os.path.relpath(cur, root)
+        if rel == '.':
+            rel = ''
+        depth = (rel.count(os.sep) + 1) if rel else 0
+        if depth > max_depth:
+            dirs[:] = []
+            continue
+
+        if '.git' in dirs or '.git' in in_files:
+            try:
+                ig = subprocess.run(
+                    ['git', 'ls-files', '--others', '--ignored',
+                     '--exclude-standard', '--directory'],
+                    cwd=cur, capture_output=True, text=True, timeout=5,
+                )
+                for ln in ig.stdout.splitlines():
+                    ln = ln.rstrip('/').strip()
+                    if not ln:
+                        continue
+                    ignored.add(os.path.join(rel, ln) if rel else ln)
+            except (OSError, subprocess.SubprocessError):
+                pass
+            try:
+                st = subprocess.run(
+                    ['git', 'status', '--porcelain'],
+                    cwd=cur, capture_output=True, text=True, timeout=5,
+                )
+                if st.returncode == 0:
+                    for line in st.stdout.splitlines():
+                        if len(line) <= 3:
+                            continue
+                        xy = line[:2].strip()
+                        name = line[3:].strip()
+                        if ' -> ' in name:
+                            name = name.split(' -> ')[1]
+                        full = os.path.join(rel, name) if rel else name
+                        files[full] = xy or '?'
+            except (OSError, subprocess.SubprocessError):
+                pass
+            dirs[:] = []  # nested repo handles its own subtree
+            continue
+
+        if '.gitignore' in in_files:
+            patterns = _read_gitignore_patterns(cur)
+            for p in _collect_gitignored(cur, patterns):
+                ignored.add(os.path.join(rel, p) if rel else p)
+
+        dirs[:] = [d for d in dirs if d not in SKIP_NAMES]
+
+    return files, list(ignored)
+
+
 @app.route('/api/git/status')
 def git_status():
     path = request.args.get('path', '.')
+    files, ignored = _collect_repo_data(path)
+    is_git = False
     try:
-        r = subprocess.run(['git', 'status', '--porcelain'], cwd=path,
-                           capture_output=True, text=True, timeout=5)
-        files = {}
-        for line in r.stdout.splitlines():
-            if len(line) > 3:
-                xy = line[:2].strip()
-                name = line[3:].strip()
-                if ' -> ' in name:
-                    name = name.split(' -> ')[1]
-                files[name] = xy or '?'
-        ignored = []
-        is_git = r.returncode == 0
-        if is_git:
-            ig = subprocess.run(
-                ['git', 'ls-files', '--others', '--ignored', '--exclude-standard', '--directory'],
-                cwd=path, capture_output=True, text=True, timeout=5,
-            )
-            ignored = [ln.rstrip('/') for ln in ig.stdout.splitlines() if ln.strip()]
-        else:
-            # Fallback: parse .gitignore directly so files still grey out before `git init`
-            patterns = _read_gitignore_patterns(path)
-            ignored = _collect_gitignored(path, patterns)
-        return jsonify({'files': files, 'ignored': ignored, 'is_git': is_git})
-    except Exception:
-        return jsonify({'files': {}, 'ignored': [], 'is_git': False})
+        r = subprocess.run(['git', 'rev-parse', '--is-inside-work-tree'],
+                           cwd=path, capture_output=True, text=True, timeout=5)
+        is_git = r.returncode == 0 and r.stdout.strip() == 'true'
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return jsonify({'files': files, 'ignored': ignored, 'is_git': is_git})
 
 
 @app.route('/api/search')
@@ -1296,7 +1341,7 @@ def resume_session():
 
 
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
-    host = os.environ.get('HOST', '127.0.0.1')
+    port = int(os.environ.get('PORT', 61234))
+    host = os.environ.get('HOST', '0.0.0.0')
     print(f'Claude Code Web IDE → http://{host}:{port}')
     socketio.run(app, host=host, port=port, debug=False, allow_unsafe_werkzeug=True)

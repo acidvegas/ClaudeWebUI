@@ -1595,12 +1595,28 @@ function updateTermDot() { /* status dot removed */ }
 
 // ─── File tree ────────────────────────────────────────────────────────────────
 
+function recomputeDirtyDirs() {
+  const dirs = new Set();
+  for (const path of Object.keys(state.gitStatus || {})) {
+    if (!state.gitStatus[path]) continue;
+    let p = path;
+    while (true) {
+      const idx = p.lastIndexOf('/');
+      if (idx <= 0) break;
+      p = p.slice(0, idx);
+      dirs.add(p);
+    }
+  }
+  state.gitDirtyDirs = dirs;
+}
+
 async function refreshGitBadges() {
   if (!state.cwd) return;
   const data = await apiFetch(`/api/git/status?path=${enc(state.cwd)}`);
   if (!data) return;
   state.gitStatus  = data.files || {};
   state.gitIgnored = new Set(data.ignored || []);
+  recomputeDirtyDirs();
 
   const cwdPrefix = state.cwd + '/';
   document.querySelectorAll('#file-tree .tree-item').forEach(item => {
@@ -1608,10 +1624,15 @@ async function refreshGitBadges() {
     if (!p) return;
     const rel  = p.startsWith(cwdPrefix) ? p.slice(cwdPrefix.length) : p;
     const name = p.split('/').pop();
+    const isDir = item.classList.contains('tree-dir');
     const status  = state.gitStatus[rel] || '';
     const ignored = state.gitIgnored.has(rel) || ALWAYS_DIM.has(name);
-    const fgClass = ignored ? 'fg-ignored' : gitStatusClass(status);
-    const badge   = ignored ? '' : gitBadge(status);
+    let fgClass = ignored ? 'fg-ignored' : gitStatusClass(status);
+    let badge   = ignored ? '' : gitBadge(status);
+    if (!ignored && isDir && !fgClass && state.gitDirtyDirs.has(rel)) {
+      fgClass = 'fg-modified';
+      badge = '<span class="tree-badge bg-modified">M</span>';
+    }
 
     const nameEl = item.querySelector('.tree-name');
     if (nameEl) {
@@ -1620,9 +1641,7 @@ async function refreshGitBadges() {
     }
     const oldBadge = item.querySelector('.tree-badge');
     if (oldBadge) oldBadge.remove();
-    if (badge && item.classList.contains('tree-file')) {
-      item.insertAdjacentHTML('beforeend', badge);
-    }
+    if (badge) item.insertAdjacentHTML('beforeend', badge);
   });
 }
 
@@ -1634,6 +1653,7 @@ async function loadTree(path) {
   ]);
   state.gitStatus = (gitData && gitData.files) || {};
   state.gitIgnored = new Set((gitData && gitData.ignored) || []);
+  recomputeDirtyDirs();
   renderTree(nodes || [], el('file-tree'), path);
   attachRootDrop(el('file-tree'), path);
 }
@@ -1662,8 +1682,13 @@ function renderNodes(nodes, parent, basePath, depth, expanded) {
     const rel = node.path.startsWith(basePath + '/') ? node.path.slice(basePath.length + 1) : node.path;
     const status  = state.gitStatus[rel] || '';
     const ignored = (state.gitIgnored && state.gitIgnored.has(rel)) || ALWAYS_DIM.has(node.name);
-    const fgClass = ignored ? 'fg-ignored' : gitStatusClass(status);
-    const badge   = ignored ? '' : gitBadge(status);
+    let fgClass = ignored ? 'fg-ignored' : gitStatusClass(status);
+    let badge   = ignored ? '' : gitBadge(status);
+    if (!ignored && node.type === 'dir' && !fgClass &&
+        state.gitDirtyDirs && state.gitDirtyDirs.has(rel)) {
+      fgClass = 'fg-modified';
+      badge = '<span class="tree-badge bg-modified">M</span>';
+    }
     const item = document.createElement('div');
     item.className = 'tree-item';
     item.dataset.path = node.path;
@@ -1680,7 +1705,8 @@ function renderNodes(nodes, parent, basePath, depth, expanded) {
       if (isOpen) item.classList.add('open');
       item.innerHTML =
         `<span class="tree-icon">${isOpen ? '▼' : '▶'}</span>` +
-        `<span class="tree-name dir-name ${fgClass}">${esc(node.name)}</span>`;
+        `<span class="tree-name dir-name ${fgClass}">${esc(node.name)}</span>` +
+        badge;
       const children = document.createElement('div');
       children.className = 'tree-children' + (isOpen ? '' : ' hidden');
       if (node.children && node.children.length) renderNodes(node.children, children, basePath, depth + 1, expanded);
@@ -2658,10 +2684,15 @@ function addTab(path) {
 
   tab.querySelector('.tab-close').addEventListener('click', (e) => {
     e.stopPropagation();
+    const entry = state.openTabs[path];
+    if (entry && entry.dirty) {
+      const name = path.split('/').pop();
+      if (!confirm(`"${name}" has unsaved changes. Close without saving?`)) return;
+    }
     const wasActive = tab.classList.contains('active');
-    if (state.openTabs[path]) {
-      try { state.openTabs[path].changeListener?.dispose(); } catch {}
-      state.openTabs[path].model.dispose();
+    if (entry) {
+      try { entry.changeListener?.dispose(); } catch {}
+      entry.model.dispose();
       delete state.openTabs[path];
     }
     tab.remove();

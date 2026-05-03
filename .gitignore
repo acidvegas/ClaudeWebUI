@@ -33,3 +33,7 @@ Thumbs.db
 .env
 .env.local
 .webui-secret
+
+# debugging in docker
+start.sh
+restart.sh

@@ -14,6 +14,7 @@ source .venv/bin/activate
 
 pip install -q -r requirements.txt
 
-PORT=${PORT:-5000}
+PORT=${PORT:-45000}
+HOST=10.30.0.10
 echo "Starting Claude Code Web IDE on http://localhost:$PORT"
-python app.py
+python3 app.py
