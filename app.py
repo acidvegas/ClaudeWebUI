@@ -22,16 +22,29 @@ from datetime import datetime, timedelta, timezone
 from functools import wraps
 from pathlib import Path
 
-from dotenv import load_dotenv
+from dotenv import dotenv_values
 from flask import (Flask, jsonify, redirect, render_template, request, abort,
                    send_file, session as flask_session, url_for)
 from flask_socketio import SocketIO, emit, join_room, leave_room
 
 
 _APP_DIR = os.path.dirname(os.path.abspath(__file__))
-load_dotenv(os.path.join(_APP_DIR, '.env'))
+# Read .env into a private dict — NOT into os.environ — so that values like
+# HOST/PORT/WEBUI_PASSWORD don't leak into shells we spawn (which would
+# clobber $HOST in the prompt and expose the password to `env` in the PTY).
+_DOTENV = {k: v for k, v in dotenv_values(os.path.join(_APP_DIR, '.env')).items() if v is not None}
 
-WEBUI_PASSWORD = os.environ.get('WEBUI_PASSWORD') or 'loldongs'
+def _cfg(key, default=None):
+    return _DOTENV.get(key, os.environ.get(key, default))
+
+WEBUI_PASSWORD = _cfg('WEBUI_PASSWORD') or 'admin'
+
+# Defence in depth — never let these leak into a PTY child:
+#   - WEBUI_PASSWORD: secret
+#   - HOST/PORT: Flask's app.run auto-loads .env into os.environ regardless
+#     of how we read it ourselves, which would clobber zsh's $HOST in the
+#     prompt and confuse anything else that reads $PORT in the shell.
+_PTY_ENV_SCRUB = ('WEBUI_PASSWORD', 'HOST', 'PORT')
 
 
 # ---------- persistent secret key (so restarts don't log everyone out) ----------
@@ -150,6 +163,8 @@ def _start_pty(session_id, cwd, args=None, cmd=None):
     fcntl.ioctl(slave_fd, termios.TIOCSWINSZ, struct.pack('HHHH', 50, 220, 0, 0))
 
     env = dict(os.environ)
+    for k in _PTY_ENV_SCRUB:
+        env.pop(k, None)
     env.update({
         'TERM': 'xterm-256color',
         'COLORTERM': 'truecolor',
@@ -325,6 +340,28 @@ def file_tree():
         return result
 
     return jsonify(build(path))
+
+
+@app.route('/api/list-dirs')
+def list_dirs():
+    raw = request.args.get('path', '~')
+    if raw.startswith('~'):
+        raw = os.path.expanduser(raw)
+    path = os.path.realpath(raw or os.path.expanduser('~'))
+    if not os.path.isdir(path):
+        return jsonify({'path': path, 'dirs': [], 'error': 'not a directory'}), 200
+    try:
+        names = []
+        for e in os.scandir(path):
+            try:
+                if e.is_dir(follow_symlinks=False):
+                    names.append(e.name)
+            except OSError:
+                continue
+        names.sort(key=str.lower)
+        return jsonify({'path': path, 'dirs': names})
+    except OSError as exc:
+        return jsonify({'path': path, 'dirs': [], 'error': str(exc)}), 200
 
 
 @app.route('/api/file', methods=['GET'])
@@ -662,6 +699,61 @@ def git_show():
         })
     except (OSError, subprocess.SubprocessError) as exc:
         return jsonify({'error': str(exc)}), 400
+
+
+@app.route('/api/git/checkout', methods=['POST'])
+def git_checkout():
+    data = request.get_json() or {}
+    path = data.get('path', '')
+    branch = (data.get('branch') or '').strip()
+    create = bool(data.get('create'))
+    if not path or not os.path.isdir(path):
+        return jsonify({'error': 'invalid path'}), 400
+    if not branch or not re.match(r'^[A-Za-z0-9_./+-]{1,200}$', branch):
+        return jsonify({'error': 'invalid branch name'}), 400
+    cmd = ['git', 'checkout']
+    if create:
+        cmd.append('-b')
+    cmd.append(branch)
+    try:
+        r = subprocess.run(cmd, cwd=path, capture_output=True, text=True, timeout=15)
+    except (OSError, subprocess.SubprocessError) as exc:
+        return jsonify({'error': str(exc)}), 400
+    if r.returncode != 0:
+        return jsonify({'error': (r.stderr or r.stdout).strip() or 'checkout failed'}), 400
+    return jsonify({'ok': True, 'output': (r.stdout + r.stderr).strip()})
+
+
+@app.route('/api/git/commit', methods=['POST'])
+def git_commit():
+    data = request.get_json() or {}
+    path = data.get('path', '')
+    msg  = (data.get('message') or '').strip()
+    if not path or not os.path.isdir(path):
+        return jsonify({'error': 'invalid path'}), 400
+    if not msg:
+        return jsonify({'error': 'commit message required'}), 400
+
+    env = dict(os.environ)
+    env['GIT_TERMINAL_PROMPT'] = '0'  # never hang waiting for credentials
+
+    try:
+        add = subprocess.run(['git', 'add', '-A'], cwd=path,
+                             capture_output=True, text=True, timeout=30, env=env)
+    except (OSError, subprocess.SubprocessError) as exc:
+        return jsonify({'error': 'git add: ' + str(exc)}), 400
+    if add.returncode != 0:
+        return jsonify({'error': 'git add failed: ' +
+                        ((add.stderr or add.stdout).strip() or 'unknown')}), 400
+
+    try:
+        cm = subprocess.run(['git', 'commit', '-m', msg], cwd=path,
+                            capture_output=True, text=True, timeout=30, env=env)
+    except (OSError, subprocess.SubprocessError) as exc:
+        return jsonify({'error': 'git commit: ' + str(exc)}), 400
+    if cm.returncode != 0:
+        return jsonify({'error': (cm.stderr or cm.stdout).strip() or 'commit failed'}), 400
+    return jsonify({'ok': True, 'output': (cm.stdout + cm.stderr).strip()})
 
 
 @app.route('/api/diff')
@@ -1320,7 +1412,10 @@ def resume_session():
 
 
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5005))
-    host = os.environ.get('HOST', '0.0.0.0')
+    port = int(_cfg('PORT', 5005))
+    host = _cfg('HOST', '0.0.0.0')
     print(f'Claude Code Web IDE → http://{host}:{port}')
-    socketio.run(app, host=host, port=port, debug=False, allow_unsafe_werkzeug=True)
+    # load_dotenv=False stops Flask from re-loading .env into os.environ at
+    # boot, which would otherwise undo our private _DOTENV setup.
+    socketio.run(app, host=host, port=port, debug=False,
+                 allow_unsafe_werkzeug=True, load_dotenv=False)

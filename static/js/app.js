@@ -516,9 +516,9 @@ function initUI() {
 
   // Open directory (re-uses startup modal)
   el('btn-open-dir').addEventListener('click', () => {
-    el('startup-dir').value = state.cwd;
+    el('startup-dir').value = homeRel(state.cwd);
     el('modal-startup').classList.remove('hidden');
-    setTimeout(() => el('startup-dir').focus(), 50);
+    setTimeout(focusStartupDirEnd, 50);
   });
 
   // New session
@@ -568,6 +568,10 @@ function initUI() {
     if (state.activePane === 'shell') respawnShell();
     else refitTerminal();
   });
+  el('btn-scroll-bottom').addEventListener('click', () => {
+    const term = state.activePane === 'shell' ? state.shellTerm : state.term;
+    if (term) { try { term.scrollToBottom(); } catch {} }
+  });
   el('btn-md-preview').addEventListener('click', () => {
     if (state.currentFile) openMarkdownPreview(state.currentFile);
   });
@@ -599,6 +603,13 @@ function setSidebar(open) {
 function prettyPath(p) {
   if (!p) return '';
   if (window.HOME_DIR && p === window.HOME_DIR) return '~';
+  if (window.HOME_DIR && p.startsWith(window.HOME_DIR + '/')) return '~' + p.slice(window.HOME_DIR.length);
+  return p;
+}
+
+function homeRel(p) {
+  if (!p) return '~/';
+  if (window.HOME_DIR && p === window.HOME_DIR) return '~/';
   if (window.HOME_DIR && p.startsWith(window.HOME_DIR + '/')) return '~' + p.slice(window.HOME_DIR.length);
   return p;
 }
@@ -795,10 +806,13 @@ async function newSkill(commandsDir) {
 
 function updateFitTerminalButton() {
   const btn = el('btn-fit-terminal');
-  if (!btn) return;
+  const scrollBtn = el('btn-scroll-bottom');
   const show = state.activePane === 'terminal' || state.activePane === 'shell';
-  btn.classList.toggle('hidden', !show);
-  btn.title = state.activePane === 'shell' ? 'Restart shell (fresh in cwd)' : 'Refit terminal';
+  if (btn) {
+    btn.classList.toggle('hidden', !show);
+    btn.title = state.activePane === 'shell' ? 'Restart shell (fresh in cwd)' : 'Refit terminal';
+  }
+  if (scrollBtn) scrollBtn.classList.toggle('hidden', !show);
 }
 
 function updateEditorChromeButtons() {
@@ -1304,7 +1318,7 @@ async function loadClaudeHistory() {
 
 async function showStartupModal() {
   const modal = el('modal-startup');
-  el('startup-dir').value = state.cwd;
+  el('startup-dir').value = homeRel(state.cwd);
 
   const recents = getRecentDirs();
   if (recents.length) {
@@ -1339,12 +1353,126 @@ async function showStartupModal() {
   el('startup-open-btn').addEventListener('click', () => {
     dismissStartup(el('startup-dir').value.trim() || state.cwd);
   });
+  const dirAuto = createDirAutocomplete(el('startup-dir'), el('startup-dir-suggest'));
   el('startup-dir').addEventListener('keydown', (e) => {
+    if (dirAuto.handleKeydown(e)) return;
     if (e.key === 'Enter') dismissStartup(el('startup-dir').value.trim() || state.cwd);
   });
 
+  el('startup-clear-recents').addEventListener('click', () => {
+    if (!confirm('Clear recent directories?')) return;
+    localStorage.removeItem('recentDirs');
+    el('startup-recents-list').innerHTML = '';
+    el('startup-recents-section').classList.add('hidden');
+  });
+
   modal.classList.remove('hidden');
-  setTimeout(() => el('startup-dir').focus(), 80);
+  setTimeout(focusStartupDirEnd, 80);
+}
+
+function focusStartupDirEnd() {
+  const input = el('startup-dir');
+  if (!input) return;
+  input.focus();
+  const len = input.value.length;
+  try { input.setSelectionRange(len, len); } catch {}
+}
+
+function createDirAutocomplete(input, panel) {
+  let items = [];
+  let activeIdx = -1;
+  let parentPath = '';
+  let debounce = null;
+
+  async function refresh() {
+    const raw = input.value;
+    let parent, prefix;
+    const slash = raw.lastIndexOf('/');
+    if (slash >= 0) {
+      parent = raw.slice(0, slash) || '/';
+      prefix = raw.slice(slash + 1);
+    } else {
+      parent = '~';
+      prefix = raw;
+    }
+    const data = await apiFetch(`/api/list-dirs?path=${enc(parent)}`);
+    if (!data) { hide(); return; }
+    const lo = prefix.toLowerCase();
+    let matches = (data.dirs || []).filter(n => n.toLowerCase().startsWith(lo));
+    if (!matches.length && lo) {
+      matches = (data.dirs || []).filter(n => n.toLowerCase().includes(lo));
+    }
+    items = matches.slice(0, 200);
+    parentPath = homeRel(data.path || parent);
+    activeIdx = -1;
+    render();
+  }
+
+  function render() {
+    panel.innerHTML = '';
+    if (!items.length) {
+      panel.innerHTML = '<div class="dir-suggest-empty">No matching directories</div>';
+      panel.classList.remove('hidden');
+      return;
+    }
+    items.forEach((name, i) => {
+      const row = document.createElement('div');
+      row.className = 'dir-suggest-item' + (i === activeIdx ? ' active' : '');
+      row.innerHTML = `<span class="dir-suggest-icon">📁</span><span>${esc(name)}</span>`;
+      row.addEventListener('mousedown', (ev) => { ev.preventDefault(); pick(i); });
+      panel.appendChild(row);
+    });
+    panel.classList.remove('hidden');
+    if (activeIdx >= 0) {
+      const active = panel.children[activeIdx];
+      if (active && active.scrollIntoView) active.scrollIntoView({ block: 'nearest' });
+    }
+  }
+
+  function pick(i) {
+    if (i < 0 || i >= items.length) return;
+    const sep = parentPath.endsWith('/') ? '' : '/';
+    input.value = parentPath + sep + items[i] + '/';
+    input.focus();
+    refresh();
+  }
+
+  function hide() { panel.classList.add('hidden'); items = []; activeIdx = -1; }
+
+  input.addEventListener('input', () => {
+    clearTimeout(debounce);
+    debounce = setTimeout(refresh, 120);
+  });
+  input.addEventListener('focus', refresh);
+  input.addEventListener('blur', () => setTimeout(hide, 120));
+
+  function handleKeydown(e) {
+    if (panel.classList.contains('hidden')) return false;
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      if (items.length) { activeIdx = (activeIdx + 1) % items.length; render(); }
+      return true;
+    }
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (items.length) { activeIdx = (activeIdx - 1 + items.length) % items.length; render(); }
+      return true;
+    }
+    if (e.key === 'Tab' && items.length) {
+      e.preventDefault();
+      pick(activeIdx >= 0 ? activeIdx : 0);
+      return true;
+    }
+    if (e.key === 'Escape') { hide(); return true; }
+    if (e.key === 'Enter' && activeIdx >= 0) {
+      e.preventDefault();
+      pick(activeIdx);
+      return true;
+    }
+    return false;
+  }
+
+  return { refresh, hide, handleKeydown };
 }
 
 function mkStartupItem(icon, path, preview, time, badgeKind) {
@@ -1999,6 +2127,24 @@ function renderGitPanel(data) {
     ? `<div class="git-remote" title="${esc(data.remote_url)}">${esc(data.remote_url)}</div>`
     : '<div class="git-remote dim">no remote</div>';
 
+  const dirtyCount = (st.staged || 0) + (st.modified || 0) + (st.untracked || 0);
+  const commitSection = `
+    <div class="git-section">
+      <div class="git-section-title">
+        Commit
+        ${dirtyCount ? `<span class="dim">(${dirtyCount} change${dirtyCount === 1 ? '' : 's'})</span>` : '<span class="dim">(working tree clean)</span>'}
+      </div>
+      <textarea id="git-commit-msg" class="git-commit-msg"
+                placeholder="Commit message…" rows="2"
+                ${dirtyCount ? '' : 'disabled'}></textarea>
+      <button id="git-commit-btn" class="btn btn-primary git-commit-btn"
+              type="button" ${dirtyCount ? '' : 'disabled'}>
+        Stage all & commit
+      </button>
+      <div id="git-commit-error" class="git-commit-error hidden"></div>
+    </div>
+  `;
+
   host.innerHTML = `
     <div class="git-section git-head">
       <div class="git-branch-row">
@@ -2017,11 +2163,16 @@ function renderGitPanel(data) {
       <div class="git-status-row">${statusBits.join('')}</div>
     </div>
 
+    ${commitSection}
+
     <div class="git-section">
-      <div class="git-section-title">Branches <span class="dim">(${data.branches.length})</span></div>
+      <div class="git-section-title">
+        Branches <span class="dim">(${data.branches.length})</span>
+        <button id="git-new-branch-btn" class="git-section-btn" type="button" title="New branch">+</button>
+      </div>
       <div class="git-list">
         ${data.branches.map(b =>
-          `<div class="git-row${b.current ? ' current' : ''}" title="${esc(b.name)}">
+          `<div class="git-row git-branch-row-item${b.current ? ' current' : ''}" data-branch="${esc(b.name)}" title="${b.current ? 'Current branch' : 'Click to checkout ' + esc(b.name)}">
             <span class="git-row-icon">${b.current ? '●' : '○'}</span>
             <span class="git-row-name">${esc(b.name)}</span>
           </div>`
@@ -2067,6 +2218,75 @@ function renderGitPanel(data) {
   host.querySelectorAll('.git-commit').forEach(row => {
     row.addEventListener('click', () => openDiffTab(row.dataset.rev, row.dataset.subject));
   });
+
+  const commitBtn = el('git-commit-btn');
+  if (commitBtn) commitBtn.addEventListener('click', doGitCommit);
+
+  const newBranchBtn = el('git-new-branch-btn');
+  if (newBranchBtn) newBranchBtn.addEventListener('click', () => {
+    const name = prompt('New branch name:');
+    if (!name) return;
+    doGitCheckout(name.trim(), true);
+  });
+
+  host.querySelectorAll('.git-branch-row-item').forEach(row => {
+    if (row.classList.contains('current')) return;
+    row.addEventListener('click', () => {
+      const name = row.dataset.branch;
+      if (!name) return;
+      if (dirtyCount && !confirm(`Switch to '${name}'? You have ${dirtyCount} uncommitted change${dirtyCount === 1 ? '' : 's'} — git will refuse if any would be overwritten.`)) return;
+      doGitCheckout(name, false);
+    });
+  });
+}
+
+async function doGitCommit() {
+  const msg = (el('git-commit-msg').value || '').trim();
+  const err = el('git-commit-error');
+  err.classList.add('hidden');
+  err.textContent = '';
+  if (!msg) {
+    err.textContent = 'Commit message required.';
+    err.classList.remove('hidden');
+    return;
+  }
+  const btn = el('git-commit-btn');
+  btn.disabled = true;
+  btn.textContent = 'Committing…';
+  try {
+    const r = await fetch('/api/git/commit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: state.cwd, message: msg }),
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok || data.error) {
+      err.textContent = data.error || `commit failed (HTTP ${r.status})`;
+      err.classList.remove('hidden');
+      return;
+    }
+    el('git-commit-msg').value = '';
+    loadGitPanel();
+    loadTree(state.cwd);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Stage all & commit';
+  }
+}
+
+async function doGitCheckout(branch, create) {
+  const r = await fetch('/api/git/checkout', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path: state.cwd, branch, create: !!create }),
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok || data.error) {
+    alert('Checkout failed:\n' + (data.error || `HTTP ${r.status}`));
+    return;
+  }
+  loadGitPanel();
+  loadTree(state.cwd);
 }
 
 async function openDiffTab(rev, subject) {

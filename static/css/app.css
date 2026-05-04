@@ -259,6 +259,46 @@ body.trippy .session-card.current {
 }
 .startup-dir-row .btn { padding: 8px 18px; font-size: 13px; border-radius: var(--radius); flex-shrink: 0; }
 
+.dir-suggest {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--canvas-inset);
+  max-height: 220px; overflow-y: auto;
+  font-family: var(--font-mono); font-size: 12px;
+}
+.dir-suggest.hidden { display: none; }
+.dir-suggest-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 10px; cursor: pointer;
+  color: var(--text-muted);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.dir-suggest-item:hover,
+.dir-suggest-item.active {
+  background: var(--surface0); color: var(--text);
+}
+.dir-suggest-icon { color: var(--accent); flex-shrink: 0; }
+.dir-suggest-empty {
+  padding: 8px 10px; color: var(--text-muted);
+  font-size: 11px; font-style: italic;
+}
+
+.startup-section-head {
+  display: flex; align-items: center; justify-content: space-between;
+}
+.startup-clear-btn {
+  background: transparent; border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 10px; font-weight: 600;
+  letter-spacing: .08em; text-transform: uppercase;
+  padding: 3px 8px; border-radius: var(--radius);
+  cursor: pointer;
+}
+.startup-clear-btn:hover {
+  color: var(--text); border-color: var(--text-muted);
+  background: var(--surface0);
+}
+
 .startup-scroll { overflow-y: auto; max-height: 240px; }
 .startup-item {
   display: flex; align-items: center; gap: 10px;
@@ -437,7 +477,42 @@ body.trippy .session-card.current {
   font-size: 9px; font-weight: 700; letter-spacing: .1em;
   color: var(--text-muted); text-transform: uppercase;
   margin-bottom: 6px; user-select: none;
+  display: flex; align-items: center; gap: 6px;
 }
+.git-section-btn {
+  margin-left: auto;
+  background: transparent; border: 1px solid var(--border);
+  color: var(--text-muted); cursor: pointer;
+  width: 18px; height: 18px; border-radius: var(--radius);
+  font-size: 13px; line-height: 1; padding: 0;
+}
+.git-section-btn:hover { color: var(--text); border-color: var(--text-muted); background: var(--surface0); }
+
+.git-commit-msg {
+  width: 100%; box-sizing: border-box;
+  background: var(--canvas-inset); color: var(--text);
+  border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 6px 8px; font-family: var(--font-mono); font-size: 12px;
+  resize: vertical; margin-bottom: 6px;
+}
+.git-commit-msg:focus { outline: none; border-color: var(--accent); }
+.git-commit-msg:disabled { opacity: .6; cursor: not-allowed; }
+.git-commit-btn {
+  width: 100%; padding: 6px 10px; font-size: 12px;
+  border-radius: var(--radius);
+}
+.git-commit-btn:disabled { opacity: .5; cursor: not-allowed; }
+.git-commit-error {
+  margin-top: 6px; padding: 6px 8px;
+  background: rgba(248, 81, 73, .1); border: 1px solid rgba(248, 81, 73, .3);
+  border-radius: var(--radius);
+  color: #ff7b72; font-size: 11px;
+  white-space: pre-wrap; word-break: break-word;
+}
+.git-commit-error.hidden { display: none; }
+.git-branch-row-item { cursor: pointer; }
+.git-branch-row-item.current { cursor: default; }
+.git-branch-row-item:not(.current):hover { background: var(--surface0); }
 .git-head { background: var(--canvas); }
 .git-branch-row {
   display: flex; align-items: center; gap: 6px;
@@ -1125,6 +1200,7 @@ kbd {
   display: flex; flex-direction: column;
   background: var(--canvas-inset);
 }
+
 
 /* ── stats pills ── */
 .ts-pill {
